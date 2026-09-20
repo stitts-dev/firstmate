@@ -2201,6 +2201,11 @@ while :; do
   if [ -d "$STATE/procevent" ]; then
     FM_HOME="$FM_HOME" "$SCRIPT_DIR/fm-procevent.sh" reconcile >/dev/null 2>&1 || true
   fi
+  # Reconcile repairs sources this home already registered. Adoption covers the
+  # other half: a live Lavish review nobody is listening to, however it came to
+  # exist. The server's own presence field decides, so a session a worker is
+  # polling in the foreground is left to that worker.
+  FM_HOME="$FM_HOME" "$SCRIPT_DIR/fm-lavish-adopt.sh" sweep >/dev/null 2>&1 || true
   # Then deliver any queued-but-unsurfaced result, including one a runner
   # published while this watcher was between cycles.
   procevent_surface_queued
