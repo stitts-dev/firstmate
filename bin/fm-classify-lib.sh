@@ -654,7 +654,7 @@ status_monitor_line() {  # <status-file>
 
 # 0 when a captain-held <line> masked by later routine status still governs:
 # the task's crew state is hold-compatible and a task named in its
-# `tracked by` list is still an open captain call.
+# `tracked by` list, resolved through its origin, is still an open captain call.
 _fm_masked_hold_live() {  # <status-file> <captain-held-line>
   local task id ids
   status_is_captain_held "$2" || return 1
@@ -662,7 +662,7 @@ _fm_masked_hold_live() {  # <status-file> <captain-held-line>
   crew_hold_compatible "$task" || return 1
   case "$2" in *'tracked by '*) ids=${2##*tracked by } ;; *) return 1 ;; esac
   for id in ${ids//,/ }; do
-    "$FM_CAPTAIN_HOLD_BIN" open "$id" >/dev/null 2>&1 && return 0
+    "$FM_CAPTAIN_HOLD_BIN" open "$id" --origin "$task" >/dev/null 2>&1 && return 0
   done
   return 1
 }

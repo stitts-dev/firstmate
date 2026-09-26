@@ -2092,6 +2092,20 @@ test_legacy_identities_keep_working() {
   run_captain "$home" verify "$id" >/dev/null \
     || fail "legacy short-key metadata did not verify against composed identities"
 
+  # A captain-held transfer line records the same short keys; the live-hold
+  # predicate resolves them through the origin, and nothing else.
+  run_captain "$home" open pick-one --origin "$id" \
+    || fail "open did not resolve a legacy short key through its origin"
+  if run_captain "$home" open pick-one 2>/dev/null; then
+    fail "open resolved a legacy short key without an origin"
+  fi
+  if run_captain "$home" open pick-one --origin sample-other-origin 2>/dev/null; then
+    fail "open resolved a legacy short key through an unrelated origin"
+  fi
+  if run_captain "$home" open ghost-key --origin "$id" 2>/dev/null; then
+    fail "open treated an unresolvable short key as a live captain call"
+  fi
+
   # The shim's routed close records the routed work inside the captain decision
   # and clears the recorded edge.
   tasks_in "$home" add sample-legacy-work "Apply the legacy choice" \
@@ -2115,6 +2129,9 @@ test_legacy_identities_keep_working() {
     || fail "the shim resolve path failed"
   show=$(tasks_in "$home" show "$hold" --full)
   assert_contains "$show" "state: done" "the shim resolve did not close the row"
+  if run_captain "$home" open pick-one --origin "$id" 2>/dev/null; then
+    fail "open kept an answered legacy call live through its origin"
+  fi
   assert_contains "$show" "Use route north." "the shim resolve lost the captain decision"
   assert_contains "$show" "- sample-legacy-work" "the shim resolve lost the routed identities"
   show=$(tasks_in "$home" show sample-legacy-work --full)

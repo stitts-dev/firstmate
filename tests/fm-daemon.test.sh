@@ -846,7 +846,7 @@ test_stale_captain_held_survives_routine_status_but_not_a_blocker() {
   state="$dir/state"; statusf="$state/held-w9hr.status"; stub="$dir/stub"
   mkdir -p "$stub"
   printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$FM_FAKE_CREW_STATE"\n' > "$stub/crew-state"
-  printf '#!/usr/bin/env bash\n[ "$1" = open ] && [ "$2" = "$FM_FAKE_OPEN_CALL" ]\n' > "$stub/captain-hold"
+  printf '#!/usr/bin/env bash\n[ "$1" = open ] && [ "$2" = "$FM_FAKE_OPEN_CALL" ] && [ "$3" = --origin ] && [ "$4" = held-w9hr ]\n' > "$stub/captain-hold"
   chmod +x "$stub/crew-state" "$stub/captain-hold"
   printf 'captain-held [key=route]: tracked by task-decision-route\n' > "$statusf"
   printf 'working: routine repair bookkeeping completed\n' >> "$statusf"

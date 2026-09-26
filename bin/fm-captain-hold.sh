@@ -30,7 +30,7 @@
 #   fm-captain-hold.sh binding <source-id>
 #   fm-captain-hold.sh complete <origin-id> (--none | <task-id>...)
 #   fm-captain-hold.sh verify <origin-id>
-#   fm-captain-hold.sh open <task-id> [--identity] [--distinguish-absent]
+#   fm-captain-hold.sh open <task-id> [--identity] [--distinguish-absent] [--origin <origin-id>]
 #   fm-captain-hold.sh diverged
 #   fm-captain-hold.sh reconcile list
 #   fm-captain-hold.sh reconcile close <task-id> --evidence-file <path>
@@ -1846,12 +1846,18 @@ EOF
 # exist holds nothing. Every read failure over a record that DOES exist is a 2,
 # printed to stderr, because a mechanical closer must never read "cannot tell"
 # as permission to close.
-command_open() {  # <task-id> [--identity] [--distinguish-absent]
-  local id='' identity=0 distinguish_absent=0 data state root file backend show shown_body
+command_open() {  # <task-id> [--identity] [--distinguish-absent] [--origin <origin-id>]
+  local id='' identity=0 distinguish_absent=0 origin='' resolved rc data state root file backend show shown_body
   while [ "$#" -gt 0 ]; do
     case "$1" in
       --identity) identity=1 ;;
       --distinguish-absent) distinguish_absent=1 ;;
+      --origin)
+        [ "$#" -ge 2 ] || { usage >&2; exit 2; }
+        validate_slug origin-id "$2"
+        origin=$2
+        shift
+        ;;
       -*) usage >&2; exit 2 ;;
       *)
         [ -z "$id" ] || { usage >&2; exit 2; }
@@ -1886,6 +1892,15 @@ command_open() {  # <task-id> [--identity] [--distinguish-absent]
     fi
   fi
   fm_tasks_axi_compatible || { printf 'fm-captain-hold: compatible tasks-axi is required\n' >&2; exit 2; }
+  if [ -n "$origin" ]; then
+    rc=0
+    resolved=$(resolve_entry "$origin" "$id" 2>/dev/null) || rc=$?
+    case "$rc" in
+      0) id=${resolved%% *} ;;
+      1) [ "$distinguish_absent" = 0 ] || return 3; return 1 ;;
+      *) printf 'fm-captain-hold: the held entry %s could not be resolved for %s\n' "$id" "$origin" >&2; exit 2 ;;
+    esac
+  fi
   if fm_backlog_row_probe "$data" "$id"; then
     state=${FM_BACKLOG_ROW_STATE%% *}
     if [ "$state" != "done" ] && [ "$FM_BACKLOG_ROW_HOLD_KIND" = captain ]; then

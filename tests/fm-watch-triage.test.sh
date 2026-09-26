@@ -2718,7 +2718,7 @@ test_wedge_threshold_recheck_names_the_captain_for_a_held_lane() {
 # A later blocker, an answered call, or a lost run is different: each restores
 # the ordinary escalation path, so the durable hold cannot hide a new risk.
 fake_open_captain_call() {  # <fakebin>
-  printf '#!/usr/bin/env bash\n[ "$1" = open ] && [ "$2" = "$FM_FAKE_OPEN_CALL" ]\n' > "$1/captain-hold"
+  printf '#!/usr/bin/env bash\n[ "$1" = open ] && [ "$2" = "$FM_FAKE_OPEN_CALL" ] && [ "$3" = --origin ] && [ "$4" = wedge ]\n' > "$1/captain-hold"
   chmod +x "$1/captain-hold"
 }
 
