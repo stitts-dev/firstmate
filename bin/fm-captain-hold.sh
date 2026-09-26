@@ -159,6 +159,10 @@
 # treat "cannot tell" as its own case instead of as a no. With
 # `--distinguish-absent`, an absent local task returns 3 instead of 1; a home
 # with no backlog file counts as absent, because it records no captain calls.
+# With `--origin <origin-id>`, <task-id> is a held entry from that origin's
+# `captain-held ... tracked by` transfer line and resolves through the same
+# origin-bound resolver `complete` uses (a legacy or prefix-migrated hold);
+# an unresolved entry is not open, and an ambiguous or unreadable one exits 2.
 # It prints nothing on these predicate results and mutates nothing, unless
 # `--identity` asks it to print this call's
 # LIFECYCLE identity, which it does on an exit 0 only. That identity - the

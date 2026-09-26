@@ -1095,9 +1095,9 @@ housekeeping() {  # <state>
   # Pane busy state does NOT end the wait. A declared wait can legitimately hold a
   # pane busy - a worker parked on a long foreground call it keeps live for as long
   # as the wait lasts - so reading busy as "the crew resumed" retires the window of
-  # exactly the declaration that needs it. The crew's own latest status line is the
-  # authority, and the loop head above already drops the marker the moment that line
-  # stops declaring the wait.
+  # exactly the declaration that needs it. The crew's own governing status event
+  # (status_monitor_line) is the authority, and the loop head above already drops
+  # the marker the moment that event stops declaring the wait.
   pause_secs=${FM_PAUSE_RESURFACE_SECS:-$FM_PAUSE_RESURFACE_SECS_DEFAULT}
   for marker in "$state"/.subsuper-paused-*; do
     [ -e "$marker" ] || continue
