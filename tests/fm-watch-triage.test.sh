@@ -2715,23 +2715,31 @@ test_wedge_threshold_recheck_names_the_captain_for_a_held_lane() {
 # Routine worker bookkeeping may be appended after the transfer while the same
 # captain call remains open, and that append must not turn an expected idle pane
 # back into a possible wedge.
-# A later blocker is different: it replaces the held wait and restores the
-# ordinary escalation path, so the durable hold cannot hide a new risk.
+# A later blocker, an answered call, or a lost run is different: each restores
+# the ordinary escalation path, so the durable hold cannot hide a new risk.
+fake_open_captain_call() {  # <fakebin>
+  printf '#!/usr/bin/env bash\n[ "$1" = open ] && [ "$2" = "$FM_FAKE_OPEN_CALL" ]\n' > "$1/captain-hold"
+  chmod +x "$1/captain-hold"
+}
+
 test_captain_held_wait_survives_routine_status_but_not_a_blocker() {
   local dir state fakebin out capture statusf window key n
   local working='state: working · source: run-step · ci running'
   local lost='state: unknown · source: none · attributed run disappeared'
+  local resumed='state: working · source: status-log · working: resumed'
 
   dir=$(wedge_threshold_fixture captain-held-routine-update \
     'captain-held [key=metric]: tracked by coach-metric-call' 0)
   state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
   statusf="$state/wedge.status"; window="test:fm-wedge"; key=$(printf '%s' "$window" | tr ':/.' '___')
+  fake_open_captain_call "$fakebin"
   printf 'working: routine repair bookkeeping completed\n' >> "$statusf"
   printf '%s' "$(seen_sig "$statusf")" > "$state/.seen-wedge_status"
 
   n=1
   while [ "$n" -le 3 ]; do
-    wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" absorb \
+    FM_CAPTAIN_HOLD_BIN="$fakebin/captain-hold" FM_FAKE_OPEN_CALL=coach-metric-call \
+      wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" absorb \
       || fail "a routine status after a verified hold re-armed the wedge alarm at threshold $n: $(cat "$out")"
     n=$((n + 1))
   done
@@ -2742,22 +2750,38 @@ test_captain_held_wait_survives_routine_status_but_not_a_blocker() {
 
   printf 'blocked [key=repair]: repair validation failed\n' >> "$statusf"
   printf '%s' "$(seen_sig "$statusf")" > "$state/.seen-wedge_status"
-  wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" exit \
+  FM_CAPTAIN_HOLD_BIN="$fakebin/captain-hold" FM_FAKE_OPEN_CALL=coach-metric-call \
+    wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" exit \
     || fail "a new blocker after a verified hold did not restore stale escalation"
   grep -F 'possible wedge, escalation 1' "$out" >/dev/null \
     || fail "the new blocker stayed hidden behind the verified hold: $(cat "$out")"
+
+  dir=$(wedge_threshold_fixture captain-held-answered \
+    'captain-held [key=metric]: tracked by coach-metric-call' 0)
+  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
+  statusf="$state/wedge.status"
+  fake_open_captain_call "$fakebin"
+  printf 'working: resumed after the captain answered\n' >> "$statusf"
+  printf '%s' "$(seen_sig "$statusf")" > "$state/.seen-wedge_status"
+  FM_CAPTAIN_HOLD_BIN="$fakebin/captain-hold" FM_FAKE_OPEN_CALL='' \
+    wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$resumed" exit \
+    || fail "an answered captain call kept hiding the resumed pane"
+  grep -F 'possible wedge, escalation 1' "$out" >/dev/null \
+    || fail "the answered call did not restore stale escalation: $(cat "$out")"
 
   dir=$(wedge_threshold_fixture captain-held-lost-run \
     'captain-held [key=metric]: tracked by coach-metric-call' 0)
   state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
   statusf="$state/wedge.status"
+  fake_open_captain_call "$fakebin"
   printf 'working: routine repair bookkeeping completed\n' >> "$statusf"
   printf '%s' "$(seen_sig "$statusf")" > "$state/.seen-wedge_status"
-  wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$lost" exit \
+  FM_CAPTAIN_HOLD_BIN="$fakebin/captain-hold" FM_FAKE_OPEN_CALL=coach-metric-call \
+    wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$lost" exit \
     || fail "a lost run stayed hidden behind the earlier verified hold"
   grep -F 'possible wedge, escalation 1' "$out" >/dev/null \
     || fail "the lost run did not restore stale escalation: $(cat "$out")"
-  pass "a verified hold survives routine status while a blocker or lost run restores stale escalation"
+  pass "a verified hold survives routine status while a blocker, answer, or lost run restores stale escalation"
 }
 
 

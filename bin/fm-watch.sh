@@ -956,7 +956,7 @@ wedge_wait_evidence() {  # <task> -> `declared` or `held` on stdout
     return 0
   fi
   monitor=$(status_monitor_line "$STATE/$task.status")
-  if status_is_captain_held "$monitor" && crew_hold_compatible "$task"; then
+  if status_is_captain_held "$monitor"; then
     printf 'held'
     return 0
   fi

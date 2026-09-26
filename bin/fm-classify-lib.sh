@@ -51,6 +51,10 @@ _FM_CLASSIFY_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd 2>/dev/null)"
 # or no-mistakes install; absent, it points at the real sibling script.
 FM_CREW_STATE_BIN="${FM_CREW_STATE_BIN:-$_FM_CLASSIFY_LIB_DIR/fm-crew-state.sh}"
 
+# The captain-call reader whose `open` predicate proves a tracked call still
+# stands. Overridable so tests can stub the backlog without tasks-axi.
+FM_CAPTAIN_HOLD_BIN="${FM_CAPTAIN_HOLD_BIN:-$_FM_CLASSIFY_LIB_DIR/fm-captain-hold.sh}"
+
 # fm_run_timed, the shared hard bound the worktree write probe below puts around
 # its one filesystem walk. bin/fm-timeout-lib.sh owns bounded execution for this
 # repo, so nothing here re-derives the coreutils/BSD/perl selection. That library
@@ -627,16 +631,40 @@ EOF
 # or replacement wait changes who owns that call.
 # A paused: external wait remains last-event-wins, so working: still resumes it.
 # The bounded tail handles the common case.
-# A tail containing only routine events widens to the whole file so an older
-# durable transfer cannot age out of monitoring merely because more routine
-# bookkeeping followed it.
+# A tail containing only routine events widens to the whole file, when the file
+# holds any captain-held line, so an older durable transfer cannot age out of
+# monitoring merely because more routine bookkeeping followed it.
+# A hold masked by later routine lines governs only while the crew state stays
+# compatible and a tracked task is still an open captain call; otherwise the
+# ordinary last event governs, so an answered call or a lost run surfaces.
 status_monitor_line() {  # <status-file>
-  local f=$1 scan=''
+  local f=$1 scan='' last
   [ -f "$f" ] && [ -r "$f" ] && [ ! -L "$f" ] || { last_status_line "$f"; return 0; }
   if ! scan=$(tail -n "$FM_CLASSIFY_EVENT_WINDOW_LINES" "$f" 2>/dev/null | _fm_status_monitor_scan); then
-    scan=$(_fm_status_monitor_scan < "$f") || :
+    if grep -qF -- "${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}" "$f" 2>/dev/null; then
+      scan=$(_fm_status_monitor_scan < "$f") || :
+    fi
+  fi
+  last=$(last_status_line "$f")
+  if [ -z "$scan" ] || { [ "$scan" != "$last" ] && ! _fm_masked_hold_live "$f" "$scan"; }; then
+    scan=$last
   fi
   printf '%s\n' "$scan"
+}
+
+# 0 when a captain-held <line> masked by later routine status still governs:
+# the task's crew state is hold-compatible and a task named in its
+# `tracked by` list is still an open captain call.
+_fm_masked_hold_live() {  # <status-file> <captain-held-line>
+  local task id ids
+  status_is_captain_held "$2" || return 1
+  task=${1##*/}; task=${task%.status}
+  crew_hold_compatible "$task" || return 1
+  case "$2" in *'tracked by '*) ids=${2##*tracked by } ;; *) return 1 ;; esac
+  for id in ${ids//,/ }; do
+    "$FM_CAPTAIN_HOLD_BIN" open "$id" >/dev/null 2>&1 && return 0
+  done
+  return 1
 }
 
 # Print the event that governs monitoring for the status lines on stdin.
