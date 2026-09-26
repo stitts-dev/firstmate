@@ -2711,6 +2711,56 @@ test_wedge_threshold_recheck_names_the_captain_for_a_held_lane() {
 }
 
 
+# A verified hold is a durable transfer, not a transient last-line state.
+# Routine worker bookkeeping may be appended after the transfer while the same
+# captain call remains open, and that append must not turn an expected idle pane
+# back into a possible wedge.
+# A later blocker is different: it replaces the held wait and restores the
+# ordinary escalation path, so the durable hold cannot hide a new risk.
+test_captain_held_wait_survives_routine_status_but_not_a_blocker() {
+  local dir state fakebin out capture statusf window key n
+  local working='state: working · source: run-step · ci running'
+  local lost='state: unknown · source: none · attributed run disappeared'
+
+  dir=$(wedge_threshold_fixture captain-held-routine-update \
+    'captain-held [key=metric]: tracked by coach-metric-call' 0)
+  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
+  statusf="$state/wedge.status"; window="test:fm-wedge"; key=$(printf '%s' "$window" | tr ':/.' '___')
+  printf 'working: routine repair bookkeeping completed\n' >> "$statusf"
+  printf '%s' "$(seen_sig "$statusf")" > "$state/.seen-wedge_status"
+
+  n=1
+  while [ "$n" -le 3 ]; do
+    wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" absorb \
+      || fail "a routine status after a verified hold re-armed the wedge alarm at threshold $n: $(cat "$out")"
+    n=$((n + 1))
+  done
+  [ "$(wedge_stale_wakes "$state" "$window")" -eq 0 ] \
+    || fail "routine status after a verified hold queued a stale wake: $(cat "$state/.wake-queue")"
+  [ ! -e "$state/.wedge-escalations-$key" ] \
+    || fail "routine status after a verified hold counted a wedge escalation"
+
+  printf 'blocked [key=repair]: repair validation failed\n' >> "$statusf"
+  printf '%s' "$(seen_sig "$statusf")" > "$state/.seen-wedge_status"
+  wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$working" exit \
+    || fail "a new blocker after a verified hold did not restore stale escalation"
+  grep -F 'possible wedge, escalation 1' "$out" >/dev/null \
+    || fail "the new blocker stayed hidden behind the verified hold: $(cat "$out")"
+
+  dir=$(wedge_threshold_fixture captain-held-lost-run \
+    'captain-held [key=metric]: tracked by coach-metric-call' 0)
+  state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
+  statusf="$state/wedge.status"
+  printf 'working: routine repair bookkeeping completed\n' >> "$statusf"
+  printf '%s' "$(seen_sig "$statusf")" > "$state/.seen-wedge_status"
+  wedge_threshold_round "$state" "$fakebin" "$out" "$capture" "$window" "$lost" exit \
+    || fail "a lost run stayed hidden behind the earlier verified hold"
+  grep -F 'possible wedge, escalation 1' "$out" >/dev/null \
+    || fail "the lost run did not restore stale escalation: $(cat "$out")"
+  pass "a verified hold survives routine status while a blocker or lost run restores stale escalation"
+}
+
+
 # --- work the captain is already holding: pane churn must not re-alarm -------
 # The other record of a legitimate wait. The declared-wait bound above reads the
 # status LINE, and a delivered task's line stays `done: PR ...` while the wait
@@ -5214,6 +5264,7 @@ test_live_declared_wait_churn_honors_the_resurface_throttle
 test_live_paused_until_controls_recheck_time
 test_wedge_threshold_defers_to_a_declared_wait_under_a_working_verdict
 test_wedge_threshold_recheck_names_the_captain_for_a_held_lane
+test_captain_held_wait_survives_routine_status_but_not_a_blocker
 test_open_captain_call_bounds_stale_churn
 test_stale_churn_without_a_captain_call_still_alarms
 test_failed_wake_append_does_not_arm_the_captain_hold_throttle

@@ -621,6 +621,73 @@ EOF
   printf '%s\n' "$current"
 }
 
+# Resolve the status event that currently governs monitoring.
+# A verified captain-held transfer also survives later working: and note:
+# bookkeeping because only an explicit decision, blocker, outcome, resolution,
+# or replacement wait changes who owns that call.
+# A paused: external wait remains last-event-wins, so working: still resumes it.
+# The bounded tail handles the common case.
+# A tail containing only routine events widens to the whole file so an older
+# durable transfer cannot age out of monitoring merely because more routine
+# bookkeeping followed it.
+status_monitor_line() {  # <status-file>
+  local f=$1 scan=''
+  [ -f "$f" ] && [ -r "$f" ] && [ ! -L "$f" ] || { last_status_line "$f"; return 0; }
+  if ! scan=$(tail -n "$FM_CLASSIFY_EVENT_WINDOW_LINES" "$f" 2>/dev/null | _fm_status_monitor_scan); then
+    scan=$(_fm_status_monitor_scan < "$f") || :
+  fi
+  printf '%s\n' "$scan"
+}
+
+# Print the event that governs monitoring for the status lines on stdin.
+# Return 0 when the span contains a governing event, or 1 when it contains only
+# routine/fallback text and a bounded caller must widen its read.
+_fm_status_monitor_scan() {
+  local verb line monitor='' held='' fallback='' governed=1
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in *[![:space:]]*) fallback=$line ;; *) continue ;; esac
+    status_line_verb "$line" verb
+    case "$verb" in
+      "${FM_CLASSIFY_CAPTAIN_HELD_VERB:-$FM_CLASSIFY_CAPTAIN_HELD_VERB_DEFAULT}")
+        held=$line
+        monitor=$line
+        governed=0
+        ;;
+      needs-decision|blocked|done|failed|"${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}"|"${FM_CLASSIFY_PAUSED_VERB:-$FM_CLASSIFY_PAUSED_VERB_DEFAULT}")
+        held=''
+        monitor=$line
+        governed=0
+        ;;
+      working|note)
+        [ -n "$held" ] || monitor=$line
+        ;;
+      *)
+        if status_is_captain_relevant "$line"; then
+          held=''
+          monitor=$line
+          governed=0
+        fi
+        ;;
+    esac
+  done
+  printf '%s' "${monitor:-$fallback}"
+  return "$governed"
+}
+
+# Resolve the status event that scopes a captain-call re-surface window.
+# A still-open decision or blocker is a new call-relevant state even when later
+# routine prose follows it, while every other case uses status_monitor_line's
+# durable-transfer view.
+status_monitor_scope_line() {  # <status-file> [<kind>]
+  local current verb
+  current=$(status_current_line "$1" "${2:-}")
+  verb=$(status_line_verb "$current")
+  case "$verb" in
+    needs-decision|blocked) printf '%s\n' "$current" ;;
+    *) status_monitor_line "$1" ;;
+  esac
+}
+
 # 0 when <key> has a record in a folded "<key>\t<verb>\t<note>" open set.
 _fm_open_set_has() {  # <open-set> <key>
   case "$1" in
@@ -1946,6 +2013,20 @@ crew_absorb_class() {  # <id>
     case "$src" in run-step|pane) printf 'working'; return ;; esac
   fi
   printf 'none'
+}
+
+# 0 when the authoritative current-state owner still reports a state compatible
+# with a captain-held review after a later routine status line masked its
+# transfer declaration.
+# Failed, blocked, unknown, stopped, unreadable, and absent states return 1 so a
+# durable hold cannot hide a lost run or endpoint.
+crew_hold_compatible() {  # <id>
+  local id=$1 line state
+  [ -n "$id" ] || return 1
+  line=$("$FM_CREW_STATE_BIN" "$id" 2>/dev/null) || return 1
+  case "$line" in state:*) ;; *) return 1 ;; esac
+  state=${line#state: }; state=${state%% *}
+  case "$state" in working|parked|done|paused) return 0 ;; *) return 1 ;; esac
 }
 
 # 0 if crew <id> shows POSITIVE evidence it is still working (crew_absorb_class

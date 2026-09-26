@@ -836,6 +836,28 @@ test_stale_captain_held_classifies_pause() {
   pass "a captain-held transfer classifies as pause, not as a wedge candidate"
 }
 
+# A routine working record does not undo the verified transfer to a durable
+# captain-held task.
+# A later blocker does undo the wait classification and remains actionable.
+test_stale_captain_held_survives_routine_status_but_not_a_blocker() {
+  local dir state out statusf
+  dir=$(make_supercase stale-captain-held-routine)
+  state="$dir/state"; statusf="$state/held-w9hr.status"
+  printf 'captain-held [key=route]: tracked by task-decision-route\n' > "$statusf"
+  printf 'working: routine repair bookkeeping completed\n' >> "$statusf"
+  out=$(FM_STATE_OVERRIDE="$state" classify_stale "sess:fm-held-w9hr" "$state")
+  case "$out" in pause\|*'captain-held'*) ;;
+    *) fail "routine status erased the daemon's captain-held wait classification: $out" ;;
+  esac
+
+  printf 'blocked [key=repair]: repair validation failed\n' >> "$statusf"
+  out=$(FM_STATE_OVERRIDE="$state" classify_stale "sess:fm-held-w9hr" "$state")
+  case "$out" in escalate\|*'blocked [key=repair]'*) ;;
+    *) fail "a blocker after the verified hold stayed hidden by pause classification: $out" ;;
+  esac
+  pass "daemon classification keeps a verified hold across routine status but surfaces a later blocker"
+}
+
 # handle_wake on a paused stale records a pause marker, drops any pre-existing wedge
 # marker (so a working->paused pane is not still wedge-aged), and does NOT escalate
 # on the wake itself - the recheck is housekeeping's job on the long cadence.
@@ -2795,6 +2817,7 @@ test_stale_terminal_escalates
 test_stale_actionable_wait_escalates_and_keeps_pause_cadence
 test_stale_paused_classifies_pause
 test_stale_captain_held_classifies_pause
+test_stale_captain_held_survives_routine_status_but_not_a_blocker
 test_handle_wake_paused_records_pause_marker
 test_handle_wake_paused_signal_records_pause_marker
 test_handle_wake_terminal_signal_clears_pause_tracking
