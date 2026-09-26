@@ -836,6 +836,49 @@ test_stale_captain_held_classifies_pause() {
   pass "a captain-held transfer classifies as pause, not as a wedge candidate"
 }
 
+# A routine working record does not undo the verified transfer to a durable
+# captain-held task while the tracked call stays open and the run stays live.
+# An answered call, a lost run, or a later blocker undoes the wait
+# classification and remains actionable.
+test_stale_captain_held_survives_routine_status_but_not_a_blocker() {
+  local dir state out statusf stub
+  dir=$(make_supercase stale-captain-held-routine)
+  state="$dir/state"; statusf="$state/held-w9hr.status"; stub="$dir/stub"
+  mkdir -p "$stub"
+  # shellcheck disable=SC2016  # $FM_FAKE_CREW_STATE expands in the stub, not here
+  printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$FM_FAKE_CREW_STATE"\n' > "$stub/crew-state"
+  # shellcheck disable=SC2016  # stub args and $FM_FAKE_OPEN_CALL expand in the stub, not here
+  printf '#!/usr/bin/env bash\n[ "$1" = open ] && [ "$2" = "$FM_FAKE_OPEN_CALL" ] && [ "$3" = --origin ] && [ "$4" = held-w9hr ]\n' > "$stub/captain-hold"
+  chmod +x "$stub/crew-state" "$stub/captain-hold"
+  printf 'captain-held [key=route]: tracked by task-decision-route\n' > "$statusf"
+  printf 'working: routine repair bookkeeping completed\n' >> "$statusf"
+  out=$(FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$stub/crew-state" FM_CAPTAIN_HOLD_BIN="$stub/captain-hold" \
+    FM_FAKE_CREW_STATE='state: working · source: run-step' FM_FAKE_OPEN_CALL=task-decision-route \
+    classify_stale "sess:fm-held-w9hr" "$state")
+  case "$out" in pause\|*'captain-held'*) ;;
+    *) fail "routine status erased the daemon's captain-held wait classification: $out" ;;
+  esac
+
+  out=$(FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$stub/crew-state" FM_CAPTAIN_HOLD_BIN="$stub/captain-hold" \
+    FM_FAKE_CREW_STATE='state: working · source: run-step' FM_FAKE_OPEN_CALL='' \
+    classify_stale "sess:fm-held-w9hr" "$state")
+  case "$out" in pause\|*) fail "an answered captain call still classified the resumed pane as held: $out" ;; esac
+
+  out=$(FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$stub/crew-state" FM_CAPTAIN_HOLD_BIN="$stub/captain-hold" \
+    FM_FAKE_CREW_STATE='state: unknown · source: none' FM_FAKE_OPEN_CALL=task-decision-route \
+    classify_stale "sess:fm-held-w9hr" "$state")
+  case "$out" in pause\|*) fail "a lost run stayed hidden behind the masked captain hold: $out" ;; esac
+
+  printf 'blocked [key=repair]: repair validation failed\n' >> "$statusf"
+  out=$(FM_STATE_OVERRIDE="$state" FM_CREW_STATE_BIN="$stub/crew-state" FM_CAPTAIN_HOLD_BIN="$stub/captain-hold" \
+    FM_FAKE_CREW_STATE='state: working · source: run-step' FM_FAKE_OPEN_CALL=task-decision-route \
+    classify_stale "sess:fm-held-w9hr" "$state")
+  case "$out" in escalate\|*'blocked [key=repair]'*) ;;
+    *) fail "a blocker after the verified hold stayed hidden by pause classification: $out" ;;
+  esac
+  pass "daemon keeps an open, live captain hold across routine status but surfaces an answer, lost run, or blocker"
+}
+
 # handle_wake on a paused stale records a pause marker, drops any pre-existing wedge
 # marker (so a working->paused pane is not still wedge-aged), and does NOT escalate
 # on the wake itself - the recheck is housekeeping's job on the long cadence.
@@ -2795,6 +2838,7 @@ test_stale_terminal_escalates
 test_stale_actionable_wait_escalates_and_keeps_pause_cadence
 test_stale_paused_classifies_pause
 test_stale_captain_held_classifies_pause
+test_stale_captain_held_survives_routine_status_but_not_a_blocker
 test_handle_wake_paused_records_pause_marker
 test_handle_wake_paused_signal_records_pause_marker
 test_handle_wake_terminal_signal_clears_pause_tracking

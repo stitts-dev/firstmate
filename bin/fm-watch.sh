@@ -941,18 +941,26 @@ wedge_defer_writing() {  # <window> <since-file> <triage-label> <idle-age>
 # so a recheck that named the wrong one would point the reader away from the
 # person who can clear it.
 wedge_wait_evidence() {  # <task> -> `declared` or `held` on stdout
-  local task=$1 last until
+  local task=$1 last monitor until
   [ -n "$task" ] || return 1
   last=$(last_status_line "$STATE/$task.status")
   if status_is_captain_held "$last"; then
     printf 'held'
     return 0
   fi
-  status_is_paused "$last" || return 1
-  if until=$(status_paused_until "$last"); then
-    [ "$(date +%s)" -lt "$until" ] || return 1
+  if status_is_paused "$last"; then
+    if until=$(status_paused_until "$last"); then
+      [ "$(date +%s)" -lt "$until" ] || return 1
+    fi
+    printf 'declared'
+    return 0
   fi
-  printf 'declared'
+  monitor=$(status_monitor_line "$STATE/$task.status")
+  if status_is_captain_held "$monitor"; then
+    printf 'held'
+    return 0
+  fi
+  return 1
 }
 
 # Defer ONE wedge escalation for a pane whose own declaration explains the quiet
@@ -1338,15 +1346,16 @@ stale_wait_declaration() {  # <task>
 }
 
 # The same scope for a captain call, carrying the CALL's own lifecycle identity
-# beside the status signature. The status log is not enough on its own: a task
-# can be answered with `--release` and held again as a genuinely different call
-# without any status append, and binding the throttle to the signature alone let
-# the second call inherit the first one's silence and absorbed its first sight.
+# beside the status event that currently governs monitoring. The status log is
+# not enough on its own: a task can be answered with `--release` and held again
+# as a genuinely different call without any status append. Binding the throttle
+# to status alone let the second call inherit the first one's silence and
+# absorbed its first sight.
 # That first sight is the one alarm this bound must never swallow - a decision
 # waiting on the captain that is never surfaced is invisible, where a delivery
 # announced twice is merely noise.
 captain_call_declaration() {  # <task> <call-identity>
-  printf 'captain-hold:%s:%s' "$2" "$(fm_wake_signal_sig "$STATE/$1.status" || true)"
+  printf 'captain-hold:%s:%s' "$2" "$(status_monitor_scope_line "$STATE/$1.status" || true)"
 }
 
 # 0 when <declaration> has already been alarmed for this window inside the
