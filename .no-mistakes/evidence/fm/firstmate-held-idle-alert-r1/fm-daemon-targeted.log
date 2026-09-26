@@ -1,0 +1,4 @@
+ok - a captain-held transfer classifies as pause, not as a wedge candidate
+ok - daemon keeps an open, live captain hold across routine status but surfaces an answer, lost run, or blocker
+tests/.nm-fm-daemon.sel.sh: line 2827: test_backlog_hold_never_rechecked_while_away_record_exists: command not found
+tests/.nm-fm-daemon.sel.sh: line 2828: test_afk_one_shot_never_hands_off_captain_held_under_away_record: command not found

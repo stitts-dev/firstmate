@@ -1,0 +1,14 @@
+== hold metric and publication calls (real fm-captain-hold hold)
+-- status file after complete:
+needs-decision [key=metric]: pick the coaching metric
+needs-decision [key=publication]: keep private or publish?
+captain-held [key=metric]: tracked by voxren-pi-coach-metric,voxren-pi-coach-publication
+captain-held [key=publication]: tracked by voxren-pi-coach-metric,voxren-pi-coach-publication
+
+== S1 routine working: after hold, run live, calls open
+last_status_line:    note: rechecked worktree, nothing to do
+_: status_monitor_line: command not found
+status_monitor_line: 
+classify_stale:      self|transient stale (firstmate:fm-voxren-pi-coach): note: rechecked worktree, nothing to do
+
+== S2 lost run behind masked hold (crew state unknown)

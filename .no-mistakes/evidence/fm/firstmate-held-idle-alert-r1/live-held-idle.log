@@ -1,0 +1,38 @@
+== hold metric and publication calls (real fm-captain-hold hold)
+-- status file after complete:
+needs-decision [key=metric]: pick the coaching metric
+needs-decision [key=publication]: keep private or publish?
+captain-held [key=metric]: tracked by voxren-pi-coach-metric,voxren-pi-coach-publication
+captain-held [key=publication]: tracked by voxren-pi-coach-metric,voxren-pi-coach-publication
+
+== S1 routine working: after hold, run live, calls open
+last_status_line:    note: rechecked worktree, nothing to do
+status_monitor_line: captain-held [key=publication]: tracked by voxren-pi-coach-metric,voxren-pi-coach-publication
+classify_stale:      pause|paused (awaiting external), rechecked on a long cadence: captain-held [key=publication]: tracked by voxren-pi-coach-metric,voxren-pi-coach-publication
+
+== S2 lost run behind masked hold (crew state unknown)
+last_status_line:    note: rechecked worktree, nothing to do
+status_monitor_line: note: rechecked worktree, nothing to do
+classify_stale:      self|transient stale (firstmate:fm-voxren-pi-coach): note: rechecked worktree, nothing to do
+
+== S3 blocker after hold
+last_status_line:    blocked [key=repair]: repair validation failed
+status_monitor_line: blocked [key=repair]: repair validation failed
+classify_stale:      escalate|stale + actionable status: blocked [key=repair]: repair validation failed
+
+== S4 captain answers metric only (publication still open)
+open metric rc=1
+open publication rc=0
+last_status_line:    note: rechecked worktree, nothing to do
+status_monitor_line: captain-held [key=publication]: tracked by voxren-pi-coach-metric,voxren-pi-coach-publication
+classify_stale:      pause|paused (awaiting external), rechecked on a long cadence: captain-held [key=publication]: tracked by voxren-pi-coach-metric,voxren-pi-coach-publication
+
+== S5 captain answers publication too (all calls answered, worker resumed)
+open publication rc=1
+last_status_line:    note: rechecked worktree, nothing to do
+status_monitor_line: note: rechecked worktree, nothing to do
+classify_stale:      self|transient stale (firstmate:fm-voxren-pi-coach): note: rechecked worktree, nothing to do
+
+== S6 work untouched, nothing published
+report.md unchanged (c11144ae87a3acdf6fbb561aa134bd767cffa5a5d212a7a852a1cfcda91bbde6)
+no gh/gh-axi publish calls
